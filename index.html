@@ -33,7 +33,7 @@
             </div>
             <div class="flex gap-2">
                 <button id="btnSincronizarYahoo" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2 px-4 rounded border border-blue-200 flex items-center gap-2 transition">
-                    ⚡ Sincronizar Precios (Rápido)
+                    ⚡ Sincronizar Precios
                 </button>
                 <button id="btnAbrirModal" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded border flex items-center gap-2 transition">
                     ⚙️ Configuración / Reportes
@@ -287,43 +287,46 @@
             reader.readAsText(file);
         });
 
-        // --- SISTEMA DE SINCRONIZACIÓN CORREGIDO PARA ARCHIVOS LOCALES (file:///) ---
+        // --- SISTEMA DE SINCRONIZACIÓN ACTUALIZADO PARA SERVIDORES WEB (GITHUB) ---
         document.getElementById('btnSincronizarYahoo').addEventListener('click', async function() {
             const activos = Object.keys(cartera.posiciones);
             if (activos.length === 0) return mostrarToast("No tienes activos en tu portafolio para actualizar.", "error");
 
-            this.innerText = "⚡ Sincronizando (Espere)...";
+            this.innerText = "⚡ Sincronizando...";
             this.disabled = true;
             let actualizados = 0;
 
             try {
-                // 1. Unimos todos los símbolos en una sola lista: "AAPL,MSFT,TSLA"
                 const simbolosJuntos = activos.map(a => encodeURIComponent(a)).join(',');
-                
-                // 2. Usamos el endpoint v7 de Yahoo que permite pedir múltiples a la vez
                 const yahooTarget = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${simbolosJuntos}`;
-                
                 let data = null;
 
-                // 3. Usamos SOLO AllOrigins configurado para aceptar archivos locales sin errores CORS
+                // INTENTO 1: Usar Codetabs (El más rápido). Funciona perfecto en GitHub Pages.
                 try {
-                    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
-                    if (res.ok) {
-                        const jsonResult = await res.json();
-                        // AllOrigins mete la respuesta dentro de 'contents'
-                        if(jsonResult.contents) {
-                            try {
-                                data = JSON.parse(jsonResult.contents);
-                            } catch (parseError) {
-                                console.error("Error analizando los datos de Yahoo:", parseError);
-                            }
-                        } 
+                    const res1 = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooTarget)}`);
+                    if (res1.ok) {
+                        data = await res1.json();
                     }
                 } catch (e) {
-                    console.warn(`Error de conexión con el proxy local`, e);
+                    console.warn(`Aviso: Codetabs no respondió. Probando alternativa...`);
                 }
 
-                // 4. Si obtuvimos la data, actualizamos todos los precios de golpe
+                // INTENTO 2: Usar AllOrigins como respaldo por si el primero falla.
+                if (!data || !data.quoteResponse) {
+                    try {
+                        const res2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
+                        if (res2.ok) {
+                            const jsonResult = await res2.json();
+                            if(jsonResult.contents) {
+                                data = JSON.parse(jsonResult.contents);
+                            } 
+                        }
+                    } catch (e) {
+                        console.warn(`Error en respaldo proxy`, e);
+                    }
+                }
+
+                // Actualizar posiciones si conseguimos datos
                 if (data && data.quoteResponse && data.quoteResponse.result) {
                     data.quoteResponse.result.forEach(cotizacion => {
                         const activoStr = cotizacion.symbol;
@@ -336,15 +339,15 @@
                     });
                 }
             } catch (error) {
-                console.error(`Error en la consulta grupal:`, error);
+                console.error(`Error general en la sincronización:`, error);
             }
 
             actualizarUI();
-            this.innerText = "⚡ Sincronizar Precios (Rápido)";
+            this.innerText = "⚡ Sincronizar Precios";
             this.disabled = false;
 
             if (actualizados > 0) {
-                mostrarToast(`¡Listo! ${actualizados} activos sincronizados al instante.`);
+                mostrarToast(`¡Listo! ${actualizados} activos sincronizados.`);
             } else {
                 mostrarToast("No se pudo conectar hoy con Yahoo.", "error");
             }
