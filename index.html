@@ -287,47 +287,37 @@
             reader.readAsText(file);
         });
 
-        // --- SISTEMA DE SINCRONIZACIÓN DEFINITIVO (USANDO SÓLO ALLORIGINS /GET) ---
+        // --- SINCRONIZACIÓN PROFESIONAL CON ALPHA VANTAGE ---
         document.getElementById('btnSincronizarYahoo').addEventListener('click', async function() {
             const activos = Object.keys(cartera.posiciones);
             if (activos.length === 0) return mostrarToast("No tienes activos en tu portafolio para actualizar.", "error");
 
-            this.innerText = "⚡ Sincronizando...";
+            const API_KEY = '8QLIRL20QVQPKMRX'; 
+
+            this.innerText = "⚡ Sincronizando (Espere)...";
             this.disabled = true;
             let actualizados = 0;
 
-            try {
-                const simbolosJuntos = activos.map(a => encodeURIComponent(a)).join(',');
-                const yahooTarget = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${simbolosJuntos}`;
-                let data = null;
-
-                // ÚNICO INTENTO: allorigins con el método /get (el único que resuelve correctamente los encabezados CORS en GitHub)
+            // Alpha Vantage procesa las consultas de una en una
+            for (const activo of activos) {
                 try {
-                    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
-                    if (res.ok) {
-                        const jsonResult = await res.json();
-                        if(jsonResult.contents) {
-                            data = JSON.parse(jsonResult.contents);
-                        } 
+                    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${activo}&apikey=${API_KEY}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    if (data["Global Quote"] && data["Global Quote"]["05. price"]) {
+                        const precio = parseFloat(data["Global Quote"]["05. price"]);
+                        cartera.posiciones[activo].precioActual = precio;
+                        actualizados++;
+                    } else if (data["Information"] || data["Note"]) {
+                        console.warn("Límite de API alcanzado o advertencia:", data);
                     }
                 } catch (e) {
-                    console.warn(`Error en AllOrigins proxy`, e);
+                    console.error("Error consultando:", activo);
                 }
-
-                // Actualizar posiciones si conseguimos datos
-                if (data && data.quoteResponse && data.quoteResponse.result) {
-                    data.quoteResponse.result.forEach(cotizacion => {
-                        const activoStr = cotizacion.symbol;
-                        const precioEncontrado = cotizacion.regularMarketPrice;
-                        
-                        if (precioEncontrado && cartera.posiciones[activoStr]) {
-                            cartera.posiciones[activoStr].precioActual = parseFloat(precioEncontrado);
-                            actualizados++;
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error(`Error general en la sincronización:`, error);
+                
+                // Pausa de 1 segundo entre activos para respetar los límites gratuitos de la API
+                await new Promise(r => setTimeout(r, 1000));
             }
 
             actualizarUI();
@@ -337,7 +327,7 @@
             if (actualizados > 0) {
                 mostrarToast(`¡Listo! ${actualizados} activos sincronizados.`);
             } else {
-                mostrarToast("No se pudo conectar hoy con Yahoo.", "error");
+                mostrarToast("No se pudo conectar o límite de API alcanzado.", "error");
             }
         });
 
