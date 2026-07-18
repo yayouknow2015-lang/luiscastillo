@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Portafolio Avanzado</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; }
+        .positive { color: #16a34a; }
+        .negative { color: #dc2626; }
+        .modal {
+            display: none; 
+            position: fixed; z-index: 50; left: 0; top: 0;
+            width: 100%; height: 100%; overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+        }
+        .modal-active { display: flex; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body class="p-6 font-sans text-gray-800 relative">
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <!-- Dashboard Header -->
+        <div class="flex justify-between items-center bg-white p-4 rounded shadow">
+            <div class="flex items-center gap-3">
+                <h1 id="tituloPortafolio" class="text-2xl font-bold">Mi Portafolio</h1>
+                <button id="btnEditarNombre" class="text-sm text-gray-400 hover:text-blue-600 transition" title="Cambiar nombre del portafolio">
+                    ✏️
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <button id="btnSincronizarYahoo" class="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold py-2 px-4 rounded border border-blue-200 flex items-center gap-2 transition">
+                    ⚡ Sincronizar Precios (Rápido)
+                </button>
+                <button id="btnAbrirModal" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded border flex items-center gap-2 transition">
+                    ⚙️ Configuración / Reportes
+                </button>
+            </div>
+        </div>
+
+        <!-- Tarjetas de Resumen -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-sm text-gray-500 uppercase">Valor Total (Balance)</h3>
+                <p class="text-2xl font-bold" id="valTotal">$0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-sm text-gray-500 uppercase">Efectivo Disponible</h3>
+                <p class="text-2xl font-bold text-blue-600" id="valEfectivo">$0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-sm text-gray-500 uppercase">Beneficio No Realizado</h3>
+                <p class="text-2xl font-bold" id="valNoRealizado">$0.00</p>
+            </div>
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-sm text-gray-500 uppercase">Beneficio Realizado</h3>
+                <p class="text-2xl font-bold" id="valRealizado">$0.00</p>
+            </div>
+        </div>
+
+        <!-- Gráfico Visible en el Dashboard -->
+        <div class="bg-white p-6 rounded shadow flex flex-col items-center">
+            <h2 class="text-lg font-bold mb-4 w-full text-left">Distribución del Portafolio</h2>
+            <div class="w-full max-w-sm h-64 relative">
+                <canvas id="graficoVisible"></canvas>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Formulario -->
+            <div class="bg-white p-6 rounded shadow col-span-1 h-fit">
+                <h2 class="text-lg font-bold mb-4">Nueva Transacción</h2>
+                <form id="txForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium">Tipo</label>
+                        <select id="txTipo" class="w-full mt-1 p-2 border rounded">
+                            <option value="deposito">Depósito</option>
+                            <option value="retiro">Retiro</option>
+                            <option value="compra">Compra (Buy)</option>
+                            <option value="venta">Venta (Sell)</option>
+                        </select>
+                    </div>
+                    
+                    <div id="divActivo" class="hidden">
+                        <label class="block text-sm font-medium">Símbolo (ej. AAPL, BTC-USD)</label>
+                        <input type="text" id="txActivo" class="w-full mt-1 p-2 border rounded uppercase" placeholder="ej. AAPL o AMZN">
+                    </div>
+                    
+                    <div id="divCantidad" class="hidden">
+                        <label class="block text-sm font-medium">Cantidad</label>
+                        <input type="number" id="txCantidad" step="0.000001" min="0" class="w-full mt-1 p-2 border rounded">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium" id="lblPrecio">Monto ($)</label>
+                        <input type="number" id="txPrecio" step="0.01" min="0" class="w-full mt-1 p-2 border rounded" required>
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 font-bold transition">Registrar</button>
+                </form>
+            </div>
+
+            <!-- Tabla de Posiciones -->
+            <div class="bg-white p-6 rounded shadow col-span-2">
+                <h2 class="text-lg font-bold mb-4">Posiciones Activas</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 text-sm">
+                                <th class="p-2">Activo</th>
+                                <th class="p-2">Cantidad</th>
+                                <th class="p-2">Costo Prom.</th>
+                                <th class="p-2">Precio Actual</th>
+                                <th class="p-2">Valor Total</th>
+                                <th class="p-2">Rentabilidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="posicionesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historial -->
+        <div class="bg-white p-6 rounded shadow">
+            <h2 class="text-lg font-bold mb-4">Historial de Operaciones</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="p-2">Fecha</th>
+                            <th class="p-2">Tipo</th>
+                            <th class="p-2">Activo</th>
+                            <th class="p-2">Cantidad</th>
+                            <th class="p-2">Precio</th>
+                            <th class="p-2">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historialBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configuración -->
+    <div id="configModal" class="modal">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 relative">
+            <button id="btnCerrarModal" class="absolute top-4 right-4 text-gray-500 hover:text-black font-bold text-xl">&times;</button>
+            <h2 class="text-2xl font-bold mb-6 border-b pb-2">Configuración</h2>
+
+            <div class="space-y-6">
+                <!-- Sección de Respaldo y Restauración -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-2">Respaldo y Restauración</h3>
+                    <button id="btnExportarBackup" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-3 transition flex items-center justify-center gap-2">
+                        💾 Descargar Respaldo (JSON)
+                    </button>
+                    
+                    <div class="border p-3 rounded bg-gray-50">
+                        <label class="block text-sm font-medium mb-1">Cargar Respaldo</label>
+                        <p class="text-xs text-gray-500 mb-2">Selecciona el archivo .json descargado previamente para restaurar tu información.</p>
+                        <input type="file" id="archivoBackup" accept=".json" class="text-sm w-full cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Sección PDF -->
+                <div class="p-4 border border-indigo-200 bg-indigo-50 rounded">
+                    <h3 class="text-lg font-semibold mb-2 text-indigo-900">Emisión de Reporte PDF</h3>
+                    <label class="block text-sm mb-1 text-gray-700">Rango de fechas para el Historial:</label>
+                    <select id="rangoReporte" class="w-full mb-3 p-2 border rounded">
+                        <option value="todo">Todos los tiempos</option>
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Últimos 7 días</option>
+                        <option value="mes">Este Mes</option>
+                        <option value="ano">Este Año</option>
+                    </select>
+                    
+                    <button id="btnPdf" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition">
+                        📄 Generar Estado del Portafolio
+                    </button>
+                </div>
+
+                <!-- Botón de borrado -->
+                <div class="pt-4 border-t border-red-200">
+                    <button id="btnBorrarDatos" class="w-full bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 font-bold py-2 px-4 rounded transition">
+                        ⚠️ Borrar Todos los Datos
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+    <script>
+        const estructuraBase = { nombre: "Mi Portafolio", efectivo: 0, beneficioRealizado: 0, posiciones: {}, historial: [] };
+        let cartera = JSON.parse(localStorage.getItem('portafolioDatos')) || JSON.parse(JSON.stringify(estructuraBase));
+        
+        if (!cartera.nombre) cartera.nombre = "Mi Portafolio";
+
+        const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+        let miGraficoVisual = null;
+
+        function guardarDatos() { localStorage.setItem('portafolioDatos', JSON.stringify(cartera)); }
+        
+        function sanitizarHTML(texto) {
+            const div = document.createElement('div');
+            div.textContent = texto;
+            return div.innerHTML;
+        }
+
+        function mostrarToast(mensaje, tipo = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = tipo === 'error' ? 'bg-red-600' : 'bg-green-600';
+            toast.className = `${bgColor} text-white px-4 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 flex items-center gap-2 font-medium`;
+            toast.innerHTML = tipo === 'error' ? `<span>⚠️</span> ${mensaje}` : `<span>✅</span> ${mensaje}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        document.getElementById('tituloPortafolio').innerText = cartera.nombre; 
+        document.getElementById('btnEditarNombre').addEventListener('click', () => {
+            const nuevoNombre = prompt("Ingresa un nuevo nombre para tu portafolio:", cartera.nombre);
+            if (nuevoNombre !== null && nuevoNombre.trim() !== "") {
+                cartera.nombre = nuevoNombre.trim();
+                document.getElementById('tituloPortafolio').innerText = cartera.nombre;
+                guardarDatos();
+                mostrarToast("Nombre actualizado exitosamente");
+            }
+        });
+
+        const modal = document.getElementById('configModal');
+        document.getElementById('btnAbrirModal').addEventListener('click', () => modal.classList.add('modal-active'));
+        document.getElementById('btnCerrarModal').addEventListener('click', cerrarModal);
+        modal.addEventListener('click', function(e) { if(e.target === this) cerrarModal(); });
+        function cerrarModal() { modal.classList.remove('modal-active'); }
+
+        document.getElementById('btnExportarBackup').addEventListener('click', () => {
+            const dataStr = JSON.stringify(cartera, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement("a");
+            link.href = url;
+            const fechaString = new Date().toISOString().split('T')[0];
+            const nombreArchivo = cartera.nombre.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+            link.download = `Respaldo_${nombreArchivo}_${fechaString}.json`;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            mostrarToast("Respaldo descargado correctamente");
+        });
+
+        document.getElementById('archivoBackup').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const dataRestaurada = JSON.parse(e.target.result);
+                    if (dataRestaurada && typeof dataRestaurada.efectivo !== 'undefined' && Array.isArray(dataRestaurada.historial)) {
+                        cartera = dataRestaurada; 
+                        if (!cartera.nombre) cartera.nombre = "Mi Portafolio";
+                        document.getElementById('tituloPortafolio').innerText = cartera.nombre;
+                        actualizarUI(); 
+                        cerrarModal();
+                        mostrarToast("¡Respaldo restaurado con éxito!");
+                    } else {
+                        mostrarToast("El archivo no tiene el formato correcto.", "error");
+                    }
+                } catch (error) {
+                    mostrarToast("Error al leer el archivo de respaldo.", "error");
+                }
+                document.getElementById('archivoBackup').value = ''; 
+            };
+            reader.readAsText(file);
+        });
+
+        // --- SISTEMA DE SINCRONIZACIÓN CORREGIDO PARA ARCHIVOS LOCALES (file:///) ---
+        document.getElementById('btnSincronizarYahoo').addEventListener('click', async function() {
+            const activos = Object.keys(cartera.posiciones);
+            if (activos.length === 0) return mostrarToast("No tienes activos en tu portafolio para actualizar.", "error");
+
+            this.innerText = "⚡ Sincronizando (Espere)...";
+            this.disabled = true;
+            let actualizados = 0;
+
+            try {
+                // 1. Unimos todos los símbolos en una sola lista: "AAPL,MSFT,TSLA"
+                const simbolosJuntos = activos.map(a => encodeURIComponent(a)).join(',');
+                
+                // 2. Usamos el endpoint v7 de Yahoo que permite pedir múltiples a la vez
+                const yahooTarget = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${simbolosJuntos}`;
+                
+                let data = null;
+
+                // 3. Usamos SOLO AllOrigins configurado para aceptar archivos locales sin errores CORS
+                try {
+                    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
+                    if (res.ok) {
+                        const jsonResult = await res.json();
+                        // AllOrigins mete la respuesta dentro de 'contents'
+                        if(jsonResult.contents) {
+                            try {
+                                data = JSON.parse(jsonResult.contents);
+                            } catch (parseError) {
+                                console.error("Error analizando los datos de Yahoo:", parseError);
+                            }
+                        } 
+                    }
+                } catch (e) {
+                    console.warn(`Error de conexión con el proxy local`, e);
+                }
+
+                // 4. Si obtuvimos la data, actualizamos todos los precios de golpe
+                if (data && data.quoteResponse && data.quoteResponse.result) {
+                    data.quoteResponse.result.forEach(cotizacion => {
+                        const activoStr = cotizacion.symbol;
+                        const precioEncontrado = cotizacion.regularMarketPrice;
+                        
+                        if (precioEncontrado && cartera.posiciones[activoStr]) {
+                            cartera.posiciones[activoStr].precioActual = parseFloat(precioEncontrado);
+                            actualizados++;
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error(`Error en la consulta grupal:`, error);
+            }
+
+            actualizarUI();
+            this.innerText = "⚡ Sincronizar Precios (Rápido)";
+            this.disabled = false;
+
+            if (actualizados > 0) {
+                mostrarToast(`¡Listo! ${actualizados} activos sincronizados al instante.`);
+            } else {
+                mostrarToast("No se pudo conectar hoy con Yahoo.", "error");
+            }
+        });
+
+        document.getElementById('txTipo').addEventListener('change', toggleFields);
+
+        function toggleFields() {
+            const tipo = document.getElementById('txTipo').value;
+            const divActivo = document.getElementById('divActivo');
+            const divCantidad = document.getElementById('divCantidad');
+            const lblPrecio = document.getElementById('lblPrecio');
+            
+            if (tipo === 'deposito' || tipo === 'retiro') {
+                divActivo.classList.add('hidden'); divCantidad.classList.add('hidden'); lblPrecio.innerText = 'Monto ($)';
+                document.getElementById('txActivo').required = false;
+                document.getElementById('txCantidad').required = false;
+            } else {
+                divActivo.classList.remove('hidden'); divCantidad.classList.remove('hidden'); lblPrecio.innerText = 'Precio por unidad ($)';
+                document.getElementById('txActivo').required = true;
+                document.getElementById('txCantidad').required = true;
+            }
+        }
+
+        document.getElementById('txForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const tipo = document.getElementById('txTipo').value;
+            const activo = document.getElementById('txActivo').value.toUpperCase().trim();
+            const cantidad = parseFloat(document.getElementById('txCantidad').value) || 0;
+            const precio = parseFloat(document.getElementById('txPrecio').value) || 0;
+            const total = (tipo === 'deposito' || tipo === 'retiro') ? precio : cantidad * precio;
+
+            if (precio <= 0 || (['compra', 'venta'].includes(tipo) && cantidad <= 0)) {
+                return mostrarToast("Las cantidades y montos deben ser mayores a cero", "error");
+            }
+            if (tipo === 'retiro' && total > cartera.efectivo) return mostrarToast("Liquidez insuficiente", "error");
+            if (tipo === 'compra' && total > cartera.efectivo) return mostrarToast("Liquidez insuficiente para comprar", "error");
+            if (tipo === 'venta' && (!cartera.posiciones[activo] || cartera.posiciones[activo].cantidad < cantidad)) {
+                return mostrarToast("No posees suficientes activos para ejecutar la venta", "error");
+            }
+
+            cartera.historial.unshift({ 
+                fecha: new Date().toLocaleString(), 
+                timestamp: Date.now(),
+                tipo, activo: activo || '-', cantidad, precio, total 
+            });
+
+            if (tipo === 'deposito') cartera.efectivo += precio;
+            if (tipo === 'retiro') cartera.efectivo -= precio;
+            
+            if (tipo === 'compra') {
+                cartera.efectivo -= total;
+                if (!cartera.posiciones[activo]) cartera.posiciones[activo] = { cantidad: 0, costoPromedio: 0, precioActual: precio };
+                let pos = cartera.posiciones[activo];
+                const nuevaCantidad = pos.cantidad + cantidad;
+                pos.costoPromedio = nuevaCantidad > 0 ? ((pos.cantidad * pos.costoPromedio) + total) / nuevaCantidad : precio;
+                pos.cantidad = nuevaCantidad;
+                pos.precioActual = precio; 
+            }
+            
+            if (tipo === 'venta') {
+                cartera.efectivo += total;
+                let pos = cartera.posiciones[activo];
+                cartera.beneficioRealizado += (precio - pos.costoPromedio) * cantidad;
+                pos.cantidad -= cantidad;
+                pos.precioActual = precio;
+
+                if (pos.cantidad < 0.000001) {
+                    delete cartera.posiciones[activo]; 
+                }
+            }
+
+            actualizarUI();
+            mostrarToast("Transacción registrada con éxito");
+            this.reset();
+            toggleFields();
+        });
+
+        window.actualizarPrecioLocal = function(activo, inputElement) {
+            const nuevoPrecio = parseFloat(inputElement.value);
+            if (nuevoPrecio >= 0 && cartera.posiciones[activo]) {
+                cartera.posiciones[activo].precioActual = nuevoPrecio;
+                actualizarTotalesYGrafico();
+                guardarDatos();
+            }
+        };
+
+        function renderizarTablas() {
+            const tbodyPos = document.getElementById('posicionesBody');
+            const tbodyHist = document.getElementById('historialBody');
+            
+            tbodyPos.innerHTML = '';
+            for (let [activo, data] of Object.entries(cartera.posiciones)) {
+                let valorTotal = data.cantidad * data.precioActual;
+                let inversionInicial = data.cantidad * data.costoPromedio;
+                let ganancia = valorTotal - inversionInicial;
+                let gananciaPct = inversionInicial > 0 ? (ganancia / inversionInicial) * 100 : 0;
+                let colorClase = ganancia >= 0 ? 'positive' : 'negative';
+
+                tbodyPos.innerHTML += `
+                    <tr class="border-b hover:bg-gray-50 transition">
+                        <td class="p-2 font-bold">${sanitizarHTML(activo)}</td>
+                        <td class="p-2">${data.cantidad.toFixed(4)}</td>
+                        <td class="p-2">${formatter.format(data.costoPromedio)}</td>
+                        <td class="p-2">
+                            <input type="number" step="0.01" min="0" value="${data.precioActual}" 
+                            class="w-24 p-1 border rounded bg-white text-sm focus:outline-blue-500"
+                            onchange="actualizarPrecioLocal('${sanitizarHTML(activo)}', this)">
+                        </td>
+                        <td class="p-2">${formatter.format(valorTotal)}</td>
+                        <td class="p-2 font-bold ${colorClase}">
+                            ${formatter.format(ganancia)} (${gananciaPct.toFixed(2)}%)
+                        </td>
+                    </tr>
+                `;
+            }
+
+            tbodyHist.innerHTML = cartera.historial.map(tx => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2">${tx.fecha}</td>
+                    <td class="p-2 uppercase font-medium text-xs">${tx.tipo}</td>
+                    <td class="p-2 font-medium">${sanitizarHTML(tx.activo)}</td>
+                    <td class="p-2">${tx.cantidad > 0 ? tx.cantidad.toFixed(4) : '-'}</td>
+                    <td class="p-2">${formatter.format(tx.precio)}</td>
+                    <td class="p-2 font-bold ${['deposito', 'venta'].includes(tx.tipo) ? 'text-green-600' : 'text-red-600'}">
+                        ${['deposito', 'venta'].includes(tx.tipo) ? '+' : '-'}${formatter.format(tx.total)}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function actualizarTotalesYGrafico() {
+            let valorActivos = 0; let beneficioNoRealizado = 0;
+            let labels = []; let dataValues = [];
+            let backgroundColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b'];
+
+            for (let [activo, data] of Object.entries(cartera.posiciones)) {
+                let valor = data.cantidad * data.precioActual;
+                valorActivos += valor;
+                beneficioNoRealizado += (valor - (data.cantidad * data.costoPromedio));
+                if (valor > 0) { labels.push(activo); dataValues.push(valor); }
+            }
+
+            document.getElementById('valEfectivo').innerText = formatter.format(cartera.efectivo);
+            document.getElementById('valTotal').innerText = formatter.format(cartera.efectivo + valorActivos);
+            
+            let pnlNoReal = document.getElementById('valNoRealizado');
+            pnlNoReal.innerText = formatter.format(beneficioNoRealizado);
+            pnlNoReal.className = `text-2xl font-bold ${beneficioNoRealizado >= 0 ? 'positive' : 'negative'}`;
+            
+            let pnlReal = document.getElementById('valRealizado');
+            pnlReal.innerText = formatter.format(cartera.beneficioRealizado);
+            pnlReal.className = `text-2xl font-bold ${cartera.beneficioRealizado >= 0 ? 'positive' : 'negative'}`;
+
+            if (cartera.efectivo > 0) { labels.push("Efectivo (Liquidez)"); dataValues.push(cartera.efectivo); }
+            if(miGraficoVisual != null) { miGraficoVisual.destroy(); }
+            
+            const ctx = document.getElementById('graficoVisible').getContext('2d');
+            miGraficoVisual = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels.length > 0 ? labels : ['Sin Activos'],
+                    datasets: [{ data: dataValues.length > 0 ? dataValues : [1], backgroundColor: backgroundColors }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right' } }
+                }
+            });
+        }
+
+        function actualizarUI() {
+            renderizarTablas();
+            actualizarTotalesYGrafico();
+            guardarDatos();
+        }
+
+        document.getElementById('btnBorrarDatos').addEventListener('click', () => {
+            if(confirm("¿Estás completamente seguro? Perderás todo tu historial contable.")) {
+                localStorage.removeItem('portafolioDatos');
+                cartera = JSON.parse(JSON.stringify(estructuraBase));
+                document.getElementById('tituloPortafolio').innerText = cartera.nombre;
+                actualizarUI();
+                cerrarModal();
+                mostrarToast("Base de datos borrada con éxito", "success");
+            }
+        });
+
+        document.getElementById('btnPdf').addEventListener('click', function() {
+            const originalText = this.innerText;
+            this.innerText = "Generando PDF...";
+            this.disabled = true;
+
+            setTimeout(() => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                let valorActivos = 0; let beneficioNoRealizado = 0; let posicionesData = [];
+
+                for (let [activo, data] of Object.entries(cartera.posiciones)) {
+                    let valor = data.cantidad * data.precioActual;
+                    let inversion = data.cantidad * data.costoPromedio;
+                    let ganancia = valor - inversion;
+                    let gananciaPct = inversion > 0 ? (ganancia / inversion) * 100 : 0;
+                    
+                    valorActivos += valor;
+                    beneficioNoRealizado += ganancia;
+                    
+                    posicionesData.push([
+                        activo, 
+                        data.cantidad.toFixed(4), 
+                        formatter.format(data.precioActual), 
+                        formatter.format(valor), 
+                        `${formatter.format(ganancia)} (${gananciaPct.toFixed(2)}%)`
+                    ]);
+                }
+                
+                let valorTotal = cartera.efectivo + valorActivos;
+
+                const pageWidth = doc.internal.pageSize.getWidth();
+
+                doc.setFontSize(24); 
+                doc.setTextColor(31, 41, 55);
+                doc.text(cartera.nombre, pageWidth / 2, 20, { align: "center" });
+
+                doc.setFontSize(14); 
+                doc.setTextColor(31, 41, 55);
+                doc.text("Estado de Cuenta", 14, 30);
+                
+                doc.setFontSize(10); 
+                doc.setTextColor(107, 114, 128);
+                doc.text(`Generado el: ${new Date().toLocaleString()}`, 14, 36);
+                
+                doc.setFontSize(14); 
+                doc.setTextColor(0, 0, 0);
+                doc.text("Resumen Financiero", 14, 48);
+                
+                doc.setFontSize(11);
+                doc.text(`Valor Total del Portafolio: ${formatter.format(valorTotal)}`, 14, 58);
+                doc.text(`Efectivo Disponible: ${formatter.format(cartera.efectivo)}`, 14, 65);
+                doc.text(`Beneficio No Realizado: ${formatter.format(beneficioNoRealizado)}`, 14, 72);
+                doc.text(`Beneficio Realizado: ${formatter.format(cartera.beneficioRealizado)}`, 14, 79);
+
+                const canvas = document.getElementById('graficoVisible');
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                const pdfImgWidth = 90; 
+                const ratio = canvas.height / canvas.width;
+                const pdfImgHeight = pdfImgWidth * ratio;
+
+                doc.addImage(imgData, 'PNG', 110, 42, pdfImgWidth, pdfImgHeight);
+
+                doc.setFontSize(14); doc.text("Posiciones Activas", 14, 125);
+                doc.autoTable({
+                    startY: 130,
+                    head: [['Activo', 'Cantidad', 'Precio Actual', 'Valor Total', 'Rentabilidad']],
+                    body: posicionesData.length > 0 ? posicionesData : [['-', '-', '-', '-', '-']],
+                    theme: 'striped', headStyles: { fillColor: [79, 70, 229] }, styles: { fontSize: 10 }
+                });
+
+                doc.addPage();
+                doc.setFontSize(18); doc.setTextColor(31, 41, 55);
+                doc.text("Libro Mayor de Operaciones", 14, 20);
+
+                const rango = document.getElementById('rangoReporte').value;
+                const ahora = new Date();
+                let limiteInferior = 0; let textoRango = "Todos los tiempos";
+
+                if (rango === 'hoy') { limiteInferior = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime(); textoRango = "Día actual"; } 
+                else if (rango === 'semana') { limiteInferior = ahora.getTime() - (7 * 24 * 60 * 60 * 1000); textoRango = "Últimos 7 días"; } 
+                else if (rango === 'mes') { limiteInferior = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime(); textoRango = "Mes en curso"; } 
+                else if (rango === 'ano') { limiteInferior = new Date(ahora.getFullYear(), 0, 1).getTime(); textoRango = "Año en curso"; }
+
+                doc.setFontSize(10); doc.setTextColor(107, 114, 128);
+                doc.text(`Filtro aplicado: ${textoRango}`, 14, 28);
+
+                let historialFiltrado = cartera.historial.filter(tx => {
+                    let txTime = tx.timestamp || new Date(tx.fecha).getTime(); 
+                    return txTime >= limiteInferior;
+                });
+
+                let historialData = historialFiltrado.map(tx => [
+                    tx.fecha, tx.tipo.toUpperCase(), tx.activo,
+                    tx.cantidad > 0 ? tx.cantidad.toFixed(4) : '-',
+                    formatter.format(tx.precio), formatter.format(tx.total)
+                ]);
+
+                doc.autoTable({
+                    startY: 35,
+                    head: [['Fecha', 'Tipo', 'Activo', 'Cantidad', 'Precio/Monto', 'Total']],
+                    body: historialData.length > 0 ? historialData : [['No hay movimientos', '', '', '', '', '']],
+                    theme: 'striped', headStyles: { fillColor: [55, 65, 81] }, styles: { fontSize: 9 }
+                });
+
+                const nombreArchivoPdf = cartera.nombre.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+                doc.save(`Reporte_${nombreArchivoPdf}_${textoRango.replace(/ /g, '_')}.pdf`);
+                
+                this.innerText = originalText;
+                this.disabled = false;
+                cerrarModal();
+                mostrarToast("Reporte PDF generado exitosamente");
+            }, 100);
+        });
+
+        toggleFields();
+        actualizarUI();
+    </script>
+</body>
+</html>
