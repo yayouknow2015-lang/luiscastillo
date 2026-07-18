@@ -287,7 +287,7 @@
             reader.readAsText(file);
         });
 
-        // --- SISTEMA DE SINCRONIZACIÓN CORREGIDO PARA GITHUB PAGES ---
+        // --- SISTEMA DE SINCRONIZACIÓN DEFINITIVO (USANDO SÓLO ALLORIGINS /GET) ---
         document.getElementById('btnSincronizarYahoo').addEventListener('click', async function() {
             const activos = Object.keys(cartera.posiciones);
             if (activos.length === 0) return mostrarToast("No tienes activos en tu portafolio para actualizar.", "error");
@@ -301,26 +301,17 @@
                 const yahooTarget = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${simbolosJuntos}`;
                 let data = null;
 
-                // INTENTO 1: corsproxy.io (Funciona excelente cuando estás en dominios reales como GitHub)
+                // ÚNICO INTENTO: allorigins con el método /get (el único que resuelve correctamente los encabezados CORS en GitHub)
                 try {
-                    const res1 = await fetch(`https://corsproxy.io/?${encodeURIComponent(yahooTarget)}`);
-                    if (res1.ok) {
-                        data = await res1.json();
+                    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
+                    if (res.ok) {
+                        const jsonResult = await res.json();
+                        if(jsonResult.contents) {
+                            data = JSON.parse(jsonResult.contents);
+                        } 
                     }
                 } catch (e) {
-                    console.warn(`Aviso: corsproxy no respondió. Probando alternativa...`);
-                }
-
-                // INTENTO 2: allorigins (Método raw para evitar errores de parseo de JSON)
-                if (!data || !data.quoteResponse) {
-                    try {
-                        const res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(yahooTarget)}`);
-                        if (res2.ok) {
-                            data = await res2.json();
-                        }
-                    } catch (e) {
-                        console.warn(`Error en respaldo proxy`, e);
-                    }
+                    console.warn(`Error en AllOrigins proxy`, e);
                 }
 
                 // Actualizar posiciones si conseguimos datos
