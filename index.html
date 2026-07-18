@@ -26,9 +26,14 @@
         <!-- Dashboard Header -->
         <div class="flex justify-between items-center bg-white p-4 rounded shadow">
             <div class="flex items-center gap-3">
-                <h1 id="tituloPortafolio" class="text-2xl font-bold">Mi Portafolio</h1>
-                <button id="btnEditarNombre" class="text-sm text-gray-400 hover:text-blue-600 transition" title="Cambiar nombre del portafolio">
+                <select id="selectorPortafolio" class="text-2xl font-bold bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 pb-1 cursor-pointer w-auto text-gray-800 appearance-none pr-4" title="Cambiar de portafolio">
+                    <!-- Opciones generadas por JS -->
+                </select>
+                <button id="btnEditarNombre" class="text-sm text-gray-400 hover:text-blue-600 transition" title="Cambiar nombre del portafolio actual">
                     ✏️
+                </button>
+                <button id="btnNuevoPortafolio" class="text-sm bg-green-50 text-green-700 border border-green-200 px-3 py-1 rounded hover:bg-green-100 font-semibold transition" title="Crear un nuevo portafolio">
+                    ➕ Nuevo
                 </button>
             </div>
             <div class="flex gap-2">
@@ -154,14 +159,19 @@
             <div class="space-y-6">
                 <!-- Sección de Respaldo y Restauración -->
                 <div>
-                    <h3 class="text-lg font-semibold mb-2">Respaldo y Restauración</h3>
-                    <button id="btnExportarBackup" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mb-3 transition flex items-center justify-center gap-2">
-                        💾 Descargar Respaldo (JSON)
-                    </button>
+                    <h3 class="text-lg font-semibold mb-2">Respaldo y Descargas</h3>
+                    <div class="flex gap-2 mb-3">
+                        <button id="btnExportarBackup" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-2 text-sm rounded transition" title="Guarda solo el portafolio que estás viendo">
+                            💾 Respaldo Actual
+                        </button>
+                        <button id="btnExportarMaster" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-2 text-sm rounded transition" title="Guarda absolutamente todos los portafolios">
+                            🗄️ Respaldo Maestro
+                        </button>
+                    </div>
                     
                     <div class="border p-3 rounded bg-gray-50">
-                        <label class="block text-sm font-medium mb-1">Cargar Respaldo</label>
-                        <p class="text-xs text-gray-500 mb-2">Selecciona el archivo .json descargado previamente para restaurar tu información.</p>
+                        <label class="block text-sm font-medium mb-1">Cargar Respaldo (.json)</label>
+                        <p class="text-xs text-gray-500 mb-2">El sistema detectará si es un respaldo individual o maestro automáticamente.</p>
                         <input type="file" id="archivoBackup" accept=".json" class="text-sm w-full cursor-pointer">
                     </div>
                 </div>
@@ -179,14 +189,17 @@
                     </select>
                     
                     <button id="btnPdf" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition">
-                        📄 Generar Estado del Portafolio
+                        📄 Generar Estado de este Portafolio
                     </button>
                 </div>
 
-                <!-- Botón de borrado -->
-                <div class="pt-4 border-t border-red-200">
+                <!-- Botones de borrado -->
+                <div class="pt-4 border-t border-red-200 space-y-3">
+                    <button id="btnBorrarActual" class="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-300 font-bold py-2 px-4 rounded transition">
+                        🗑️ Borrar Portafolio Actual
+                    </button>
                     <button id="btnBorrarDatos" class="w-full bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 font-bold py-2 px-4 rounded transition">
-                        ⚠️ Borrar Todos los Datos
+                        ⚠️ Eliminar TODOS los Portafolios
                     </button>
                 </div>
             </div>
@@ -199,14 +212,48 @@
 
     <script>
         const estructuraBase = { nombre: "Mi Portafolio", efectivo: 0, beneficioRealizado: 0, posiciones: {}, historial: [] };
-        let cartera = JSON.parse(localStorage.getItem('portafolioDatos')) || JSON.parse(JSON.stringify(estructuraBase));
         
+        // --- SISTEMA MULTI-PORTAFOLIO ---
+        let appData = JSON.parse(localStorage.getItem('multiPortafolioDatos'));
+        
+        // Migración de base de datos antigua a la nueva
+        if (!appData) {
+            let oldData = JSON.parse(localStorage.getItem('portafolioDatos'));
+            let defaultId = 'port_' + Date.now();
+            appData = {
+                currentId: defaultId,
+                portfolios: {}
+            };
+            if (oldData) {
+                appData.portfolios[defaultId] = oldData;
+            } else {
+                appData.portfolios[defaultId] = JSON.parse(JSON.stringify(estructuraBase));
+            }
+            localStorage.setItem('multiPortafolioDatos', JSON.stringify(appData));
+        }
+
+        let cartera = appData.portfolios[appData.currentId];
         if (!cartera.nombre) cartera.nombre = "Mi Portafolio";
 
         const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
         let miGraficoVisual = null;
 
-        function guardarDatos() { localStorage.setItem('portafolioDatos', JSON.stringify(cartera)); }
+        function guardarDatos() { 
+            appData.portfolios[appData.currentId] = cartera;
+            localStorage.setItem('multiPortafolioDatos', JSON.stringify(appData)); 
+        }
+
+        function actualizarSelector() {
+            const selector = document.getElementById('selectorPortafolio');
+            selector.innerHTML = '';
+            for (let id in appData.portfolios) {
+                let option = document.createElement('option');
+                option.value = id;
+                option.textContent = appData.portfolios[id].nombre || 'Sin nombre';
+                if (id === appData.currentId) option.selected = true;
+                selector.appendChild(option);
+            }
+        }
         
         function sanitizarHTML(texto) {
             const div = document.createElement('div');
@@ -217,9 +264,9 @@
         function mostrarToast(mensaje, tipo = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            const bgColor = tipo === 'error' ? 'bg-red-600' : 'bg-green-600';
+            const bgColor = tipo === 'error' ? 'bg-red-600' : (tipo === 'info' ? 'bg-blue-600' : 'bg-green-600');
             toast.className = `${bgColor} text-white px-4 py-3 rounded shadow-lg transition-opacity duration-300 opacity-0 flex items-center gap-2 font-medium`;
-            toast.innerHTML = tipo === 'error' ? `<span>⚠️</span> ${mensaje}` : `<span>✅</span> ${mensaje}`;
+            toast.innerHTML = tipo === 'error' ? `<span>⚠️</span> ${mensaje}` : (tipo === 'info' ? `<span>ℹ️</span> ${mensaje}` : `<span>✅</span> ${mensaje}`);
             container.appendChild(toast);
             setTimeout(() => toast.classList.remove('opacity-0'), 10);
             setTimeout(() => {
@@ -228,13 +275,35 @@
             }, 3500);
         }
 
-        document.getElementById('tituloPortafolio').innerText = cartera.nombre; 
+        // EVENTOS DEL HEADER
+        document.getElementById('selectorPortafolio').addEventListener('change', (e) => {
+            appData.currentId = e.target.value;
+            cartera = appData.portfolios[appData.currentId];
+            actualizarUI();
+            mostrarToast(`Cambiaste a: ${cartera.nombre}`, 'info');
+        });
+
+        document.getElementById('btnNuevoPortafolio').addEventListener('click', () => {
+            const nombre = prompt("Nombre del nuevo portafolio (ej. Esposa, Cripto, Ahorros):");
+            if (nombre && nombre.trim() !== "") {
+                const nuevoId = 'port_' + Date.now();
+                let nuevaCartera = JSON.parse(JSON.stringify(estructuraBase));
+                nuevaCartera.nombre = nombre.trim();
+                
+                appData.portfolios[nuevoId] = nuevaCartera;
+                appData.currentId = nuevoId;
+                cartera = appData.portfolios[appData.currentId];
+                
+                actualizarUI();
+                mostrarToast("Portafolio creado exitosamente");
+            }
+        });
+
         document.getElementById('btnEditarNombre').addEventListener('click', () => {
-            const nuevoNombre = prompt("Ingresa un nuevo nombre para tu portafolio:", cartera.nombre);
+            const nuevoNombre = prompt("Ingresa un nuevo nombre para este portafolio:", cartera.nombre);
             if (nuevoNombre !== null && nuevoNombre.trim() !== "") {
                 cartera.nombre = nuevoNombre.trim();
-                document.getElementById('tituloPortafolio').innerText = cartera.nombre;
-                guardarDatos();
+                actualizarUI();
                 mostrarToast("Nombre actualizado exitosamente");
             }
         });
@@ -245,22 +314,36 @@
         modal.addEventListener('click', function(e) { if(e.target === this) cerrarModal(); });
         function cerrarModal() { modal.classList.remove('modal-active'); }
 
+        // EXPORTACIÓN DE RESPALDOS
         document.getElementById('btnExportarBackup').addEventListener('click', () => {
             const dataStr = JSON.stringify(cartera, null, 2);
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
-            
             const link = document.createElement("a");
             link.href = url;
             const fechaString = new Date().toISOString().split('T')[0];
             const nombreArchivo = cartera.nombre.replace(/ /g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-            link.download = `Respaldo_${nombreArchivo}_${fechaString}.json`;
+            link.download = `Respaldo_Individual_${nombreArchivo}_${fechaString}.json`;
             link.click();
-            
             URL.revokeObjectURL(url);
-            mostrarToast("Respaldo descargado correctamente");
+            mostrarToast("Respaldo del portafolio actual descargado");
         });
 
+        document.getElementById('btnExportarMaster').addEventListener('click', () => {
+            guardarDatos(); // Asegurar que todo está sincronizado
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            const fechaString = new Date().toISOString().split('T')[0];
+            link.download = `Respaldo_MAESTRO_General_${fechaString}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            mostrarToast("Respaldo maestro (Todos los datos) descargado");
+        });
+
+        // IMPORTACIÓN INTELIGENTE
         document.getElementById('archivoBackup').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -269,13 +352,27 @@
             reader.onload = function(e) {
                 try {
                     const dataRestaurada = JSON.parse(e.target.result);
-                    if (dataRestaurada && typeof dataRestaurada.efectivo !== 'undefined' && Array.isArray(dataRestaurada.historial)) {
-                        cartera = dataRestaurada; 
-                        if (!cartera.nombre) cartera.nombre = "Mi Portafolio";
-                        document.getElementById('tituloPortafolio').innerText = cartera.nombre;
-                        actualizarUI(); 
-                        cerrarModal();
-                        mostrarToast("¡Respaldo restaurado con éxito!");
+                    
+                    if (dataRestaurada.portfolios && dataRestaurada.currentId) {
+                        // Es un respaldo MAESTRO
+                        if(confirm("Estás a punto de restaurar un Respaldo Maestro. Esto SOBREESCRIBIRÁ TODOS tus portafolios actuales. ¿Continuar?")) {
+                            appData = dataRestaurada;
+                            cartera = appData.portfolios[appData.currentId];
+                            actualizarUI();
+                            cerrarModal();
+                            mostrarToast("¡Respaldo Maestro restaurado con éxito!");
+                        }
+                    } 
+                    else if (dataRestaurada && typeof dataRestaurada.efectivo !== 'undefined') {
+                        // Es un respaldo INDIVIDUAL
+                        if(confirm(`Vas a sobreescribir el portafolio actual ("${cartera.nombre}") con los datos del respaldo. ¿Continuar?`)) {
+                            cartera = dataRestaurada; 
+                            if (!cartera.nombre) cartera.nombre = "Portafolio Restaurado";
+                            appData.portfolios[appData.currentId] = cartera;
+                            actualizarUI(); 
+                            cerrarModal();
+                            mostrarToast("¡Respaldo individual restaurado con éxito!");
+                        }
                     } else {
                         mostrarToast("El archivo no tiene el formato correcto.", "error");
                     }
@@ -298,7 +395,6 @@
             this.disabled = true;
             let actualizados = 0;
 
-            // Alpha Vantage procesa las consultas de una en una
             for (const activo of activos) {
                 try {
                     const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${activo}&apikey=${API_KEY}`;
@@ -316,7 +412,6 @@
                     console.error("Error consultando:", activo);
                 }
                 
-                // Pausa de 1 segundo entre activos para respetar los límites gratuitos de la API
                 await new Promise(r => setTimeout(r, 1000));
             }
 
@@ -499,16 +594,42 @@
         }
 
         function actualizarUI() {
+            actualizarSelector();
             renderizarTablas();
             actualizarTotalesYGrafico();
             guardarDatos();
         }
 
+        // --- SISTEMA DE BORRADO ---
+        document.getElementById('btnBorrarActual').addEventListener('click', () => {
+            if(confirm(`¿Estás seguro de borrar el portafolio "${cartera.nombre}"? Esta acción no se puede deshacer.`)) {
+                delete appData.portfolios[appData.currentId];
+                
+                if(Object.keys(appData.portfolios).length === 0) {
+                    let defaultId = 'port_' + Date.now();
+                    appData.portfolios[defaultId] = JSON.parse(JSON.stringify(estructuraBase));
+                    appData.currentId = defaultId;
+                } else {
+                    appData.currentId = Object.keys(appData.portfolios)[0];
+                }
+                
+                cartera = appData.portfolios[appData.currentId];
+                actualizarUI();
+                cerrarModal();
+                mostrarToast("Portafolio eliminado", "success");
+            }
+        });
+
         document.getElementById('btnBorrarDatos').addEventListener('click', () => {
-            if(confirm("¿Estás completamente seguro? Perderás todo tu historial contable.")) {
+            if(confirm("¿Estás COMPLETAMENTE SEGURO? Perderás TODOS los portafolios de esta computadora y su historial.")) {
+                localStorage.removeItem('multiPortafolioDatos');
                 localStorage.removeItem('portafolioDatos');
-                cartera = JSON.parse(JSON.stringify(estructuraBase));
-                document.getElementById('tituloPortafolio').innerText = cartera.nombre;
+                
+                let defaultId = 'port_' + Date.now();
+                appData = { currentId: defaultId, portfolios: {} };
+                appData.portfolios[defaultId] = JSON.parse(JSON.stringify(estructuraBase));
+                cartera = appData.portfolios[appData.currentId];
+                
                 actualizarUI();
                 cerrarModal();
                 mostrarToast("Base de datos borrada con éxito", "success");
@@ -564,8 +685,8 @@
                 doc.text("Resumen Financiero", 14, 48);
                 
                 doc.setFontSize(11);
-                doc.text(`Valor Total del Portafolio: ${formatter.format(valorTotal)}`, 14, 58);
-                doc.text(`Efectivo Disponible: ${formatter.format(cartera.efectivo)}`, 14, 65);
+                doc.text(`Valor Total: ${formatter.format(valorTotal)}`, 14, 58);
+                doc.text(`Efectivo: ${formatter.format(cartera.efectivo)}`, 14, 65);
                 doc.text(`Beneficio No Realizado: ${formatter.format(beneficioNoRealizado)}`, 14, 72);
                 doc.text(`Beneficio Realizado: ${formatter.format(cartera.beneficioRealizado)}`, 14, 79);
 
