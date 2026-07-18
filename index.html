@@ -287,7 +287,7 @@
             reader.readAsText(file);
         });
 
-        // --- SISTEMA DE SINCRONIZACIÓN ACTUALIZADO PARA SERVIDORES WEB (GITHUB) ---
+        // --- SISTEMA DE SINCRONIZACIÓN CORREGIDO PARA GITHUB PAGES ---
         document.getElementById('btnSincronizarYahoo').addEventListener('click', async function() {
             const activos = Object.keys(cartera.posiciones);
             if (activos.length === 0) return mostrarToast("No tienes activos en tu portafolio para actualizar.", "error");
@@ -301,25 +301,22 @@
                 const yahooTarget = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${simbolosJuntos}`;
                 let data = null;
 
-                // INTENTO 1: Usar Codetabs (El más rápido). Funciona perfecto en GitHub Pages.
+                // INTENTO 1: corsproxy.io (Funciona excelente cuando estás en dominios reales como GitHub)
                 try {
-                    const res1 = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yahooTarget)}`);
+                    const res1 = await fetch(`https://corsproxy.io/?${encodeURIComponent(yahooTarget)}`);
                     if (res1.ok) {
                         data = await res1.json();
                     }
                 } catch (e) {
-                    console.warn(`Aviso: Codetabs no respondió. Probando alternativa...`);
+                    console.warn(`Aviso: corsproxy no respondió. Probando alternativa...`);
                 }
 
-                // INTENTO 2: Usar AllOrigins como respaldo por si el primero falla.
+                // INTENTO 2: allorigins (Método raw para evitar errores de parseo de JSON)
                 if (!data || !data.quoteResponse) {
                     try {
-                        const res2 = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yahooTarget)}`);
+                        const res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(yahooTarget)}`);
                         if (res2.ok) {
-                            const jsonResult = await res2.json();
-                            if(jsonResult.contents) {
-                                data = JSON.parse(jsonResult.contents);
-                            } 
+                            data = await res2.json();
                         }
                     } catch (e) {
                         console.warn(`Error en respaldo proxy`, e);
